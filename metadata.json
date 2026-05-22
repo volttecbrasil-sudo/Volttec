@@ -1,0 +1,6 @@
+{
+  "name": "VoltTec",
+  "description": "Uma loja virtual profissional de alta tecnologia e produtos gerais selecionados, com banners exclusivos, categorias inteligentes e experiência de compra premium.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
