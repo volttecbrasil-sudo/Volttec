@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   ShoppingCart,
   CreditCard,
@@ -18,6 +18,7 @@ import {
   Search,
   ArrowRight,
   ChevronRight,
+  ChevronLeft,
   User,
   Menu,
   Smartphone,
@@ -146,6 +147,15 @@ export default function App() {
   const [selectedColor, setSelectedColor] = useState<string>('');
   const [onlineUsers, setOnlineUsers] = useState<number>(() => Math.floor(Math.random() * 7) + 14);
 
+  const chatEndRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll chat to bottom
+  useEffect(() => {
+    if (chatEndRef.current) {
+      chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [chatMessages]);
+
   // Save Cart and Favorites to localStorage
   useEffect(() => {
     localStorage.setItem('volttec_cart', JSON.stringify(cart));
@@ -179,8 +189,25 @@ export default function App() {
     return () => clearInterval(interval);
   }, []);
 
-  const showToast = (message: string, type: 'success' | 'info' | 'error' = 'success') => {
+  const showToast = useCallback((message: string, type: 'success' | 'info' | 'error' = 'success') => {
     setToast({ message, type });
+  }, []);
+
+  const [showCookieBanner, setShowCookieBanner] = useState<boolean>(() => {
+    const consent = localStorage.getItem('volttec_cookie_consent');
+    return !consent;
+  });
+
+  const handleAcceptCookies = () => {
+    localStorage.setItem('volttec_cookie_consent', 'accepted');
+    setShowCookieBanner(false);
+    showToast('Preferências de cookies salvas: Permitido.', 'success');
+  };
+
+  const handleDeclineCookies = () => {
+    localStorage.setItem('volttec_cookie_consent', 'declined');
+    setShowCookieBanner(false);
+    showToast('Preferências de cookies salvas: Não permitido.', 'info');
   };
 
   // 2. PRODUCT DATA DEFINITIONS
@@ -601,79 +628,96 @@ export default function App() {
   }, [selectedProduct]);
 
   // 3. CART SYSTEM ACTIONS
-  const addToCart = (product: Product, quantity = 1, colorName?: string) => {
+  const addToCart = useCallback((product: Product, quantity = 1, colorName?: string) => {
     const chosenColor = colorName || product.colors[0].name;
-    const existing = cart.find(
-      item => item.product.id === product.id && item.selectedColor === chosenColor
-    );
+    setCart((prev) => {
+      const existing = prev.find(
+        item => item.product.id === product.id && item.selectedColor === chosenColor
+      );
 
-    if (existing) {
-      const newQty = existing.quantity + quantity;
-      if (newQty > product.stock) {
-        showToast(`Desculpe, limite de estoque atingido (${product.stock} unidades).`, 'error');
-        return;
-      }
-      setCart(cart.map(item =>
-        (item.product.id === product.id && item.selectedColor === chosenColor)
-          ? { ...item, quantity: newQty }
-          : item
-      ));
-    } else {
-      if (quantity > product.stock) {
-        showToast(`Desculpe, limite de estoque atingido (${product.stock} unidades).`, 'error');
-        return;
-      }
-      setCart([...cart, { product, quantity, selectedColor: chosenColor }]);
-    }
-    showToast(`${product.title} (${chosenColor}) adicionado ao carrinho!`, 'success');
-  };
-
-  const updateCartQuantity = (productId: string, colorName: string, delta: number) => {
-    setCart(cart.map(item => {
-      if (item.product.id === productId && item.selectedColor === colorName) {
-        const nextQty = item.quantity + delta;
-        if (nextQty > item.product.stock) {
-          showToast(`Limite de estoque para este produto: ${item.product.stock} unidades.`, 'error');
-          return item;
+      if (existing) {
+        const newQty = existing.quantity + quantity;
+        if (newQty > product.stock) {
+          setTimeout(() => showToast(`Desculpe, limite de estoque atingido (${product.stock} unidades).`, 'error'), 0);
+          return prev;
         }
-        return nextQty > 0 ? { ...item, quantity: nextQty } : null;
+        setTimeout(() => showToast(`${product.title} (${chosenColor}) adicionado ao carrinho!`, 'success'), 0);
+        return prev.map(item =>
+          (item.product.id === product.id && item.selectedColor === chosenColor)
+            ? { ...item, quantity: newQty }
+            : item
+        );
+      } else {
+        if (quantity > product.stock) {
+          setTimeout(() => showToast(`Desculpe, limite de estoque atingido (${product.stock} unidades).`, 'error'), 0);
+          return prev;
+        }
+        setTimeout(() => showToast(`${product.title} (${chosenColor}) adicionado ao carrinho!`, 'success'), 0);
+        return [...prev, { product, quantity, selectedColor: chosenColor }];
       }
-      return item;
-    }).filter(Boolean) as { product: Product; quantity: number; selectedColor: string }[]);
-  };
+    });
+  }, [showToast]);
 
-  const removeFromCart = (productId: string, colorName: string) => {
-    setCart(cart.filter(item => !(item.product.id === productId && item.selectedColor === colorName)));
+  const updateCartQuantity = useCallback((productId: string, colorName: string, delta: number) => {
+    setCart((prev) => {
+      let isOverStock = false;
+      const updated = prev.map(item => {
+        if (item.product.id === productId && item.selectedColor === colorName) {
+          const nextQty = item.quantity + delta;
+          if (nextQty > item.product.stock) {
+            isOverStock = true;
+            return item;
+          }
+          return nextQty > 0 ? { ...item, quantity: nextQty } : null;
+        }
+        return item;
+      }).filter(Boolean) as { product: Product; quantity: number; selectedColor: string }[];
+      
+      if (isOverStock) {
+        setTimeout(() => showToast(`Limite de estoque para este produto: ${productId} unidades.`, 'error'), 0);
+      }
+      return updated;
+    });
+  }, [showToast]);
+
+  const removeFromCart = useCallback((productId: string, colorName: string) => {
+    setCart((prev) => prev.filter(item => !(item.product.id === productId && item.selectedColor === colorName)));
     showToast('Produto removido do carrinho.', 'info');
-  };
+  }, [showToast]);
 
   // 4. FAVORITES ACTION
-  const toggleFavorite = (productId: string) => {
-    if (favorites.includes(productId)) {
-      setFavorites(favorites.filter(id => id !== productId));
-      showToast('Produto removido dos favoritos.', 'info');
-    } else {
-      setFavorites([...favorites, productId]);
-      showToast('Produto adicionado aos favoritos!', 'success');
-    }
-  };
+  const toggleFavorite = useCallback((productId: string) => {
+    setFavorites((prev) => {
+      if (prev.includes(productId)) {
+        setTimeout(() => showToast('Produto removido dos favoritos.', 'info'), 0);
+        return prev.filter(id => id !== productId);
+      } else {
+        setTimeout(() => showToast('Produto adicionado aos favoritos!', 'success'), 0);
+        return [...prev, productId];
+      }
+    });
+  }, [showToast]);
 
   // 5. COMPARE SYSTEM ACTIONS
-  const toggleCompare = (product: Product) => {
-    const isCompared = compareList.some(p => p.id === product.id);
-    if (isCompared) {
-      setCompareList(compareList.filter(p => p.id !== product.id));
-      showToast('Produto removido da comparação.', 'info');
-    } else {
-      if (compareList.length >= 3) {
-        showToast('Você pode comparar no máximo 3 produtos ao mesmo tempo.', 'error');
-        return;
+  const toggleCompare = useCallback((product: Product) => {
+    setCompareList((prev) => {
+      const isCompared = prev.some(p => p.id === product.id);
+      if (isCompared) {
+        setTimeout(() => showToast('Produto removido da comparação.', 'info'), 0);
+        return prev.filter(p => p.id !== product.id);
+      } else {
+        if (prev.length >= 3) {
+          setTimeout(() => showToast('Você pode comparar no máximo 3 produtos ao mesmo tempo.', 'error'), 0);
+          return prev;
+        }
+        setTimeout(() => {
+          setIsCompareOpen(true);
+          showToast('Produto adicionado para comparação!', 'success');
+        }, 0);
+        return [...prev, product];
       }
-      setCompareList([...compareList, product]);
-      setIsCompareOpen(true);
-      showToast('Produto adicionado para comparação!', 'success');
-    }
-  };
+    });
+  }, [showToast]);
 
   // Cart values calculation
   const cartSubtotal = cart.reduce((acc, item) => acc + item.product.price * item.quantity, 0);
@@ -1055,43 +1099,55 @@ export default function App() {
         </section>
 
         {/* --- BRAND VALUE PROPOSITION --- */}
-        <section className="bg-slate-950 border-y border-white/5 py-8 px-4">
-          <div className="max-w-7xl mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 content-center text-center">
+        <section className="bg-slate-950 border-y border-white/5 py-6 px-1.5 sm:px-4">
+          <div className="max-w-7xl mx-auto grid grid-cols-4 gap-1 sm:gap-6 content-center text-center">
             
-            <div className="flex flex-col items-center p-3">
-              <div className="p-3 bg-indigo-950/50 rounded-full border border-indigo-500/20 mb-3">
-                <Trash2 className="h-5 w-5 text-amber-400 rotate-180" /> {/* Modified trash icon as replacement or ShieldCheck */}
-                <ShieldCheck className="h-5 w-5 text-amber-500" />
+            <div className="flex flex-col items-center p-0.5 sm:p-3">
+              <div className="p-1.5 sm:p-3 bg-indigo-950/50 rounded-full border border-indigo-500/20 mb-1.5 sm:mb-3">
+                <ShieldCheck className="h-4 w-4 sm:h-5 sm:w-5 text-amber-500" />
               </div>
-              <h3 className="text-xs md:text-sm font-bold text-slate-100 flex items-center justify-center gap-1.5">
-                <ShieldCheck className="h-3.5 w-3.5 text-amber-500 shrink-0" />
-                <span>Garantia</span>
+              <h3 className="text-[10px] sm:text-xs md:text-sm font-bold text-slate-100 leading-tight">
+                Garantia
               </h3>
-              <p className="text-[10px] md:text-xs text-slate-450 mt-1">Substituição imediata homologada</p>
+              <p className="text-[8px] sm:text-[10px] md:text-xs text-slate-450 mt-0.5 sm:mt-1 leading-tight min-h-[24px] sm:min-h-0">
+                Substituição imediata homologada
+              </p>
             </div>
 
-            <div className="flex flex-col items-center p-3">
-              <div className="p-3 bg-indigo-950/50 rounded-full border border-indigo-500/20 mb-3">
-                <Truck className="h-5 w-5 text-amber-500" />
+            <div className="flex flex-col items-center p-0.5 sm:p-3">
+              <div className="p-1.5 sm:p-3 bg-indigo-950/50 rounded-full border border-indigo-500/20 mb-1.5 sm:mb-3">
+                <Truck className="h-4 w-4 sm:h-5 sm:w-5 text-amber-500" />
               </div>
-              <h3 className="text-xs md:text-sm font-bold text-slate-100">Frete Expresso Grátis</h3>
-              <p className="text-[10px] md:text-xs text-slate-450 mt-1">Envio prioritário 100% segurado. Verifique as regiões</p>
+              <h3 className="text-[10px] sm:text-xs md:text-sm font-bold text-slate-100 leading-tight">
+                Frete Expresso Grátis
+              </h3>
+              <p className="text-[8px] sm:text-[10px] md:text-xs text-slate-450 mt-0.5 sm:mt-1 leading-tight min-h-[24px] sm:min-h-0">
+                Envio prioritário 100% segurado
+              </p>
             </div>
 
-            <div className="flex flex-col items-center p-3">
-              <div className="p-3 bg-indigo-950/50 rounded-full border border-indigo-500/20 mb-3">
-                <Clock className="h-5 w-5 text-amber-500" />
+            <div className="flex flex-col items-center p-0.5 sm:p-3">
+              <div className="p-1.5 sm:p-3 bg-indigo-950/50 rounded-full border border-indigo-500/20 mb-1.5 sm:mb-3">
+                <Clock className="h-4 w-4 sm:h-5 sm:w-5 text-amber-500" />
               </div>
-              <h3 className="text-xs md:text-sm font-bold text-slate-100">Atendimento 100% Humanizado</h3>
-              <p className="text-[10px] md:text-xs text-slate-450 mt-1">A solução está na Volttec</p>
+              <h3 className="text-[10px] sm:text-xs md:text-sm font-bold text-slate-100 leading-tight">
+                Atendimento 100% Humanizado
+              </h3>
+              <p className="text-[8px] sm:text-[10px] md:text-xs text-slate-450 mt-0.5 sm:mt-1 leading-tight min-h-[24px] sm:min-h-0">
+                A solução está na Volttec
+              </p>
             </div>
 
-            <div className="flex flex-col items-center p-3">
-              <div className="p-3 bg-indigo-950/50 rounded-full border border-indigo-500/20 mb-3">
-                <Headphones className="h-5 w-5 text-amber-500" />
+            <div className="flex flex-col items-center p-0.5 sm:p-3">
+              <div className="p-1.5 sm:p-3 bg-indigo-950/50 rounded-full border border-indigo-500/20 mb-1.5 sm:mb-3">
+                <Headphones className="h-4 w-4 sm:h-5 sm:w-5 text-amber-500" />
               </div>
-              <h3 className="text-xs md:text-sm font-bold text-slate-100">Suporte Técnico VoltTec</h3>
-              <p className="text-[10px] md:text-xs text-slate-450 mt-1">Contate-nos via WhatsApp ou e-mail oficial</p>
+              <h3 className="text-[10px] sm:text-xs md:text-sm font-bold text-slate-100 leading-tight">
+                Suporte Técnico VoltTec
+              </h3>
+              <p className="text-[8px] sm:text-[10px] md:text-xs text-slate-450 mt-0.5 sm:mt-1 leading-tight min-h-[24px] sm:min-h-0">
+                WhatsApp e e-mail oficial
+              </p>
             </div>
 
           </div>
@@ -1152,34 +1208,68 @@ export default function App() {
           )}
 
           {/* Core products layout */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-            {filteredProducts.map((prod) => (
-              <ProductCard
-                key={prod.id}
-                product={prod}
-                isFavorite={favorites.includes(prod.id)}
-                isCompared={compareList.some(p => p.id === prod.id)}
-                onSelect={setSelectedProduct}
-                onToggleFavorite={toggleFavorite}
-                onToggleCompare={toggleCompare}
-                onAddToCart={addToCart}
-              />
-            ))}
+          {filteredProducts.length > 0 ? (
+            <div className="relative group/slider px-2">
+              {/* Left Arrow Button for Slider - Always visible and active */}
+              <button
+                onClick={(e) => {
+                  const container = e.currentTarget.parentElement?.querySelector('.slider-container');
+                  if (container) {
+                    const offset = window.innerWidth < 640 ? window.innerWidth * 0.74 : 310;
+                    container.scrollBy({ left: -offset, behavior: 'smooth' });
+                  }
+                }}
+                className="absolute left-1 sm:left-[-16px] top-1/2 -translate-y-1/2 z-20 p-2 sm:p-2.5 bg-[#0e1424]/95 hover:bg-[#070b13] text-amber-500 hover:text-amber-400 border border-amber-500/25 rounded-full shadow-2xl cursor-pointer flex items-center justify-center hover:scale-105 active:scale-95 transition-all"
+                title="Anterior"
+              >
+                <ChevronLeft className="h-5 w-5" />
+              </button>
 
-            {filteredProducts.length === 0 && (
-              <div className="col-span-full py-16 text-center text-slate-400 bg-slate-950 rounded-2xl border border-white/5 space-y-4">
-                <AlertCircle className="h-10 w-10 text-amber-500 mx-auto" />
-                <h3 className="text-lg font-bold text-white">Nenhum produto correspondente</h3>
-                <p className="text-xs max-w-md mx-auto">Não encontramos eletrônicos que correspondam aos filtros ou termo digitado. Tente pesquisar outro termo ou redefinir filtros.</p>
-                <button 
-                  onClick={() => { setActiveCategory('all'); setSearchQuery(''); }}
-                  className="bg-amber-600 text-black text-xs font-bold py-2 px-4 rounded-full mt-2"
-                >
-                  Ver todos os Produtos
-                </button>
+              {/* Slider Container with disabled free drag/scroll-x */}
+              <div className="slider-container flex overflow-x-hidden gap-6 pb-6 pt-2 px-[15vw] sm:px-4 snap-x snap-mandatory scroll-smooth select-none">
+                {filteredProducts.map((prod) => (
+                  <div key={prod.id} className="w-[70vw] sm:w-[290px] shrink-0 snap-center">
+                    <ProductCard
+                      product={prod}
+                      isFavorite={favorites.includes(prod.id)}
+                      isCompared={compareList.some(p => p.id === prod.id)}
+                      onSelect={setSelectedProduct}
+                      onToggleFavorite={toggleFavorite}
+                      onToggleCompare={toggleCompare}
+                      onAddToCart={addToCart}
+                    />
+                  </div>
+                ))}
               </div>
-            )}
-          </div>
+
+              {/* Right Arrow Button for Slider - Always visible and active */}
+              <button
+                onClick={(e) => {
+                  const container = e.currentTarget.parentElement?.querySelector('.slider-container');
+                  if (container) {
+                    const offset = window.innerWidth < 640 ? window.innerWidth * 0.74 : 310;
+                    container.scrollBy({ left: offset, behavior: 'smooth' });
+                  }
+                }}
+                className="absolute right-1 sm:right-[-16px] top-1/2 -translate-y-1/2 z-20 p-2 sm:p-2.5 bg-[#0e1424]/95 hover:bg-[#070b13] text-amber-500 hover:text-amber-400 border border-amber-500/25 rounded-full shadow-2xl cursor-pointer flex items-center justify-center hover:scale-105 active:scale-95 transition-all"
+                title="Próximo"
+              >
+                <ChevronRight className="h-5 w-5" />
+              </button>
+            </div>
+          ) : (
+            <div className="py-16 text-center text-slate-400 bg-slate-950 rounded-2xl border border-white/5 space-y-4">
+              <AlertCircle className="h-10 w-10 text-amber-500 mx-auto" />
+              <h3 className="text-lg font-bold text-white">Nenhum produto correspondente</h3>
+              <p className="text-xs max-w-md mx-auto">Não encontramos eletrônicos que correspondam aos filtros ou termo digitado. Tente pesquisar outro termo ou redefinir filtros.</p>
+              <button 
+                onClick={() => { setActiveCategory('all'); setSearchQuery(''); }}
+                className="bg-amber-600 text-black text-xs font-bold py-2 px-4 rounded-full mt-2 cursor-pointer"
+              >
+                Ver todos os Produtos
+              </button>
+            </div>
+          )}
         </section>
 
         {/* --- CATEGORY-SPECIFIC SHELVES --- */}
@@ -1209,19 +1299,53 @@ export default function App() {
                   <ChevronRight className="h-4 w-4" />
                 </button>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-                {dealsProducts.map(p => (
-                  <ProductCard
-                    key={p.id}
-                    product={p}
-                    isFavorite={favorites.includes(p.id)}
-                    isCompared={compareList.some(comp => comp.id === p.id)}
-                    onSelect={setSelectedProduct}
-                    onToggleFavorite={toggleFavorite}
-                    onToggleCompare={toggleCompare}
-                    onAddToCart={addToCart}
-                  />
-                ))}
+              <div className="relative group/slider">
+                {/* Left Arrow Button for Slider - Always visible and active */}
+                <button
+                  onClick={(e) => {
+                    const container = e.currentTarget.parentElement?.querySelector('.slider-container');
+                    if (container) {
+                      const offset = window.innerWidth < 640 ? window.innerWidth * 0.74 : 310;
+                      container.scrollBy({ left: -offset, behavior: 'smooth' });
+                    }
+                  }}
+                  className="absolute left-1 sm:left-[-16px] top-1/2 -translate-y-1/2 z-20 p-2 sm:p-2.5 bg-[#0e1424]/95 hover:bg-[#070b13] text-amber-500 hover:text-amber-400 border border-amber-500/25 rounded-full shadow-2xl cursor-pointer flex items-center justify-center hover:scale-105 active:scale-95 transition-all"
+                  title="Anterior"
+                >
+                  <ChevronLeft className="h-5 w-5" />
+                </button>
+
+                {/* Slider Container with disabled free drag/scroll-x */}
+                <div className="slider-container flex overflow-x-hidden gap-6 pb-6 pt-2 px-[15vw] sm:px-4 snap-x snap-mandatory scroll-smooth select-none">
+                  {dealsProducts.map(p => (
+                    <div key={p.id} className="w-[70vw] sm:w-[290px] shrink-0 snap-center">
+                      <ProductCard
+                        product={p}
+                        isFavorite={favorites.includes(p.id)}
+                        isCompared={compareList.some(comp => comp.id === p.id)}
+                        onSelect={setSelectedProduct}
+                        onToggleFavorite={toggleFavorite}
+                        onToggleCompare={toggleCompare}
+                        onAddToCart={addToCart}
+                      />
+                    </div>
+                  ))}
+                </div>
+
+                {/* Right Arrow Button for Slider - Always visible and active */}
+                <button
+                  onClick={(e) => {
+                    const container = e.currentTarget.parentElement?.querySelector('.slider-container');
+                    if (container) {
+                      const offset = window.innerWidth < 640 ? window.innerWidth * 0.74 : 310;
+                      container.scrollBy({ left: offset, behavior: 'smooth' });
+                    }
+                  }}
+                  className="absolute right-1 sm:right-[-16px] top-1/2 -translate-y-1/2 z-20 p-2 sm:p-2.5 bg-[#0e1424]/95 hover:bg-[#070b13] text-amber-500 hover:text-amber-400 border border-amber-500/25 rounded-full shadow-2xl cursor-pointer flex items-center justify-center hover:scale-105 active:scale-95 transition-all"
+                  title="Próximo"
+                >
+                  <ChevronRight className="h-5 w-5" />
+                </button>
               </div>
             </section>
 
@@ -1248,19 +1372,53 @@ export default function App() {
                   <ChevronRight className="h-4 w-4" />
                 </button>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-                {bestsellersProducts.map(p => (
-                  <ProductCard
-                    key={p.id}
-                    product={p}
-                    isFavorite={favorites.includes(p.id)}
-                    isCompared={compareList.some(comp => comp.id === p.id)}
-                    onSelect={setSelectedProduct}
-                    onToggleFavorite={toggleFavorite}
-                    onToggleCompare={toggleCompare}
-                    onAddToCart={addToCart}
-                  />
-                ))}
+              <div className="relative group/slider">
+                {/* Left Arrow Button for Slider - Always visible and active */}
+                <button
+                  onClick={(e) => {
+                    const container = e.currentTarget.parentElement?.querySelector('.slider-container');
+                    if (container) {
+                      const offset = window.innerWidth < 640 ? window.innerWidth * 0.74 : 310;
+                      container.scrollBy({ left: -offset, behavior: 'smooth' });
+                    }
+                  }}
+                  className="absolute left-1 sm:left-[-16px] top-1/2 -translate-y-1/2 z-20 p-2 sm:p-2.5 bg-[#0e1424]/95 hover:bg-[#070b13] text-amber-500 hover:text-amber-400 border border-amber-500/25 rounded-full shadow-2xl cursor-pointer flex items-center justify-center hover:scale-105 active:scale-95 transition-all"
+                  title="Anterior"
+                >
+                  <ChevronLeft className="h-5 w-5" />
+                </button>
+
+                {/* Slider Container with disabled free drag/scroll-x */}
+                <div className="slider-container flex overflow-x-hidden gap-6 pb-6 pt-2 px-[15vw] sm:px-4 snap-x snap-mandatory scroll-smooth select-none">
+                  {bestsellersProducts.map(p => (
+                    <div key={p.id} className="w-[70vw] sm:w-[290px] shrink-0 snap-center">
+                      <ProductCard
+                        product={p}
+                        isFavorite={favorites.includes(p.id)}
+                        isCompared={compareList.some(comp => comp.id === p.id)}
+                        onSelect={setSelectedProduct}
+                        onToggleFavorite={toggleFavorite}
+                        onToggleCompare={toggleCompare}
+                        onAddToCart={addToCart}
+                      />
+                    </div>
+                  ))}
+                </div>
+
+                {/* Right Arrow Button for Slider - Always visible and active */}
+                <button
+                  onClick={(e) => {
+                    const container = e.currentTarget.parentElement?.querySelector('.slider-container');
+                    if (container) {
+                      const offset = window.innerWidth < 640 ? window.innerWidth * 0.74 : 310;
+                      container.scrollBy({ left: offset, behavior: 'smooth' });
+                    }
+                  }}
+                  className="absolute right-1 sm:right-[-16px] top-1/2 -translate-y-1/2 z-20 p-2 sm:p-2.5 bg-[#0e1424]/95 hover:bg-[#070b13] text-amber-500 hover:text-amber-400 border border-amber-500/25 rounded-full shadow-2xl cursor-pointer flex items-center justify-center hover:scale-105 active:scale-95 transition-all"
+                  title="Próximo"
+                >
+                  <ChevronRight className="h-5 w-5" />
+                </button>
               </div>
             </section>
 
@@ -1287,19 +1445,53 @@ export default function App() {
                   <ChevronRight className="h-4 w-4" />
                 </button>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-                {electronicsProducts.map(p => (
-                  <ProductCard
-                    key={p.id}
-                    product={p}
-                    isFavorite={favorites.includes(p.id)}
-                    isCompared={compareList.some(comp => comp.id === p.id)}
-                    onSelect={setSelectedProduct}
-                    onToggleFavorite={toggleFavorite}
-                    onToggleCompare={toggleCompare}
-                    onAddToCart={addToCart}
-                  />
-                ))}
+              <div className="relative group/slider">
+                {/* Left Arrow Button for Slider - Always visible and active */}
+                <button
+                  onClick={(e) => {
+                    const container = e.currentTarget.parentElement?.querySelector('.slider-container');
+                    if (container) {
+                      const offset = window.innerWidth < 640 ? window.innerWidth * 0.74 : 310;
+                      container.scrollBy({ left: -offset, behavior: 'smooth' });
+                    }
+                  }}
+                  className="absolute left-1 sm:left-[-16px] top-1/2 -translate-y-1/2 z-20 p-2 sm:p-2.5 bg-[#0e1424]/95 hover:bg-[#070b13] text-amber-500 hover:text-amber-400 border border-amber-500/25 rounded-full shadow-2xl cursor-pointer flex items-center justify-center hover:scale-105 active:scale-95 transition-all"
+                  title="Anterior"
+                >
+                  <ChevronLeft className="h-5 w-5" />
+                </button>
+
+                {/* Slider Container with disabled free drag/scroll-x */}
+                <div className="slider-container flex overflow-x-hidden gap-6 pb-6 pt-2 px-[15vw] sm:px-4 snap-x snap-mandatory scroll-smooth select-none">
+                  {electronicsProducts.map(p => (
+                    <div key={p.id} className="w-[70vw] sm:w-[290px] shrink-0 snap-center">
+                      <ProductCard
+                        product={p}
+                        isFavorite={favorites.includes(p.id)}
+                        isCompared={compareList.some(comp => comp.id === p.id)}
+                        onSelect={setSelectedProduct}
+                        onToggleFavorite={toggleFavorite}
+                        onToggleCompare={toggleCompare}
+                        onAddToCart={addToCart}
+                      />
+                    </div>
+                  ))}
+                </div>
+
+                {/* Right Arrow Button for Slider - Always visible and active */}
+                <button
+                  onClick={(e) => {
+                    const container = e.currentTarget.parentElement?.querySelector('.slider-container');
+                    if (container) {
+                      const offset = window.innerWidth < 640 ? window.innerWidth * 0.74 : 310;
+                      container.scrollBy({ left: offset, behavior: 'smooth' });
+                    }
+                  }}
+                  className="absolute right-1 sm:right-[-16px] top-1/2 -translate-y-1/2 z-20 p-2 sm:p-2.5 bg-[#0e1424]/95 hover:bg-[#070b13] text-amber-500 hover:text-amber-400 border border-amber-500/25 rounded-full shadow-2xl cursor-pointer flex items-center justify-center hover:scale-105 active:scale-95 transition-all"
+                  title="Próximo"
+                >
+                  <ChevronRight className="h-5 w-5" />
+                </button>
               </div>
             </section>
 
@@ -1326,19 +1518,53 @@ export default function App() {
                   <ChevronRight className="h-4 w-4" />
                 </button>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-                {accessoriesProducts.map(p => (
-                  <ProductCard
-                    key={p.id}
-                    product={p}
-                    isFavorite={favorites.includes(p.id)}
-                    isCompared={compareList.some(comp => comp.id === p.id)}
-                    onSelect={setSelectedProduct}
-                    onToggleFavorite={toggleFavorite}
-                    onToggleCompare={toggleCompare}
-                    onAddToCart={addToCart}
-                  />
-                ))}
+              <div className="relative group/slider">
+                {/* Left Arrow Button for Slider - Always visible and active */}
+                <button
+                  onClick={(e) => {
+                    const container = e.currentTarget.parentElement?.querySelector('.slider-container');
+                    if (container) {
+                      const offset = window.innerWidth < 640 ? window.innerWidth * 0.74 : 310;
+                      container.scrollBy({ left: -offset, behavior: 'smooth' });
+                    }
+                  }}
+                  className="absolute left-1 sm:left-[-16px] top-1/2 -translate-y-1/2 z-20 p-2 sm:p-2.5 bg-[#0e1424]/95 hover:bg-[#070b13] text-amber-500 hover:text-amber-400 border border-amber-500/25 rounded-full shadow-2xl cursor-pointer flex items-center justify-center hover:scale-105 active:scale-95 transition-all"
+                  title="Anterior"
+                >
+                  <ChevronLeft className="h-5 w-5" />
+                </button>
+
+                {/* Slider Container with disabled free drag/scroll-x */}
+                <div className="slider-container flex overflow-x-hidden gap-6 pb-6 pt-2 px-[15vw] sm:px-4 snap-x snap-mandatory scroll-smooth select-none">
+                  {accessoriesProducts.map(p => (
+                    <div key={p.id} className="w-[70vw] sm:w-[290px] shrink-0 snap-center">
+                      <ProductCard
+                        product={p}
+                        isFavorite={favorites.includes(p.id)}
+                        isCompared={compareList.some(comp => comp.id === p.id)}
+                        onSelect={setSelectedProduct}
+                        onToggleFavorite={toggleFavorite}
+                        onToggleCompare={toggleCompare}
+                        onAddToCart={addToCart}
+                      />
+                    </div>
+                  ))}
+                </div>
+
+                {/* Right Arrow Button for Slider - Always visible and active */}
+                <button
+                  onClick={(e) => {
+                    const container = e.currentTarget.parentElement?.querySelector('.slider-container');
+                    if (container) {
+                      const offset = window.innerWidth < 640 ? window.innerWidth * 0.74 : 310;
+                      container.scrollBy({ left: offset, behavior: 'smooth' });
+                    }
+                  }}
+                  className="absolute right-1 sm:right-[-16px] top-1/2 -translate-y-1/2 z-20 p-2 sm:p-2.5 bg-[#0e1424]/95 hover:bg-[#070b13] text-amber-500 hover:text-amber-400 border border-amber-500/25 rounded-full shadow-2xl cursor-pointer flex items-center justify-center hover:scale-105 active:scale-95 transition-all"
+                  title="Próximo"
+                >
+                  <ChevronRight className="h-5 w-5" />
+                </button>
               </div>
             </section>
 
@@ -1359,38 +1585,51 @@ export default function App() {
             <p className="text-xs md:text-sm text-slate-400 mt-1">Transparência auditada. Veja o relato de quem comprou e testou nossos eletrônicos premium.</p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {reviews.map(rev => (
-              <div key={rev.id} className="bg-slate-900/60 border border-white/5 rounded-2xl p-6 relative">
-                <div className="flex justify-between items-start mb-4">
-                  <div>
-                    <h4 className="text-sm font-bold text-white flex items-center gap-1.5">
-                      <span>{rev.name}</span>
-                      {rev.verified && (
-                        <Check className="h-3 w-3 text-[#3b82f6] bg-[#3b82f6]/10 p-0.5 rounded-full" title="Comprador Verificado" />
-                      )}
-                    </h4>
-                    <span className="text-[10px] text-[#475569]">{rev.date}</span>
+          <div className="grid grid-cols-3 md:grid-cols-3 gap-2.5 sm:gap-6">
+            {reviews.slice(0, 7).map((rev, idx) => (
+              <div 
+                key={rev.id} 
+                className={`bg-slate-900/60 border border-white/5 rounded-xl sm:rounded-2xl p-2 sm:p-6 relative transition-all hover:scale-[1.02] flex flex-col justify-between ${
+                  idx === 6 
+                    ? 'col-span-3 md:col-span-1 max-w-[280px] md:max-w-none mx-auto w-full' 
+                    : 'col-span-1'
+                }`}
+              >
+                <div>
+                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-1 sm:gap-2 mb-2 sm:mb-4">
+                    <div>
+                      <h4 className="text-[8.5px] sm:text-sm font-bold text-white flex items-center gap-1 leading-tight">
+                        <span className="truncate max-w-[55px] sm:max-w-none">{rev.name.split(' ')[0]}</span>
+                        {rev.verified && (
+                          <Check className="h-2.5 w-2.5 sm:h-3 sm:w-3 text-[#3b82f6] bg-[#3b82f6]/10 p-0.5 rounded-full shrink-0" title="Comprador Verificado" />
+                        )}
+                      </h4>
+                      <span className="text-[7.5px] sm:text-[10px] text-[#475569] block mt-0.5">{rev.date}</span>
+                    </div>
+                    <div className="flex text-amber-400 gap-0.5">
+                      {Array.from({ length: rev.rating }).map((_, i) => (
+                        <Star key={i} className="h-2 w-2 sm:h-3 sm:w-3 fill-amber-400 text-amber-400" />
+                      ))}
+                    </div>
                   </div>
-                  <div className="flex text-amber-400">
-                    {Array.from({ length: rev.rating }).map((_, i) => (
-                      <Star key={i} className="h-3 w-3 fill-amber-400 text-amber-400" />
-                    ))}
-                  </div>
+                  <p className="text-[8px] sm:text-xs text-slate-300 leading-normal sm:leading-relaxed italic">
+                    "{rev.comment}"
+                  </p>
                 </div>
-                <p className="text-xs text-slate-350 leading-relaxed italic">
-                  "{rev.comment}"
-                </p>
-                {rev.verified ? (
-                  <div className="flex items-center gap-1.5 mt-4 text-[10px] text-emerald-400 font-semibold bg-emerald-500/5 px-2.5 py-1 rounded w-fit">
-                    <ShieldCheck className="h-3 w-3" />
-                    <span>Compra Segura Verificada</span>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-1.5 mt-4 text-[10px] text-slate-500 font-medium bg-white/5 px-2.5 py-1 rounded w-fit">
-                    <span>Avaliação de Visitante</span>
-                  </div>
-                )}
+                
+                <div className="mt-2.5 sm:mt-4">
+                  {rev.verified ? (
+                    <div className="flex items-center gap-0.5 sm:gap-1.5 text-[7px] sm:text-[10px] text-emerald-400 font-semibold bg-emerald-500/5 px-1 sm:px-2.5 py-0.5 sm:py-1 rounded w-fit shrink-0">
+                      <ShieldCheck className="h-2 w-2 sm:h-3 sm:w-3 shrink-0" />
+                      <span className="hidden xs:inline">Compra Verificada</span>
+                      <span className="inline xs:hidden">Verificado</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-0.5 sm:gap-1.5 text-[7px] sm:text-[10px] text-slate-500 font-medium bg-white/5 px-1 sm:px-2.5 py-0.5 sm:py-1 rounded w-fit shrink-0">
+                      <span>Visitante</span>
+                    </div>
+                  )}
+                </div>
               </div>
             ))}
           </div>
@@ -1399,11 +1638,11 @@ export default function App() {
       </main>
 
       {/* --- FOOTER EXCLUSIVO PREMIUM --- */}
-      <footer className="bg-[#03060c] border-t border-white/5 pt-16 pb-12 px-4 md:px-8">
-        <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-10 mb-12">
+      <footer className="bg-[#03060c] border-t border-white/5 pt-16 pb-12 px-5 md:px-8">
+        <div className="max-w-7xl mx-auto grid grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-10 mb-12">
           
           {/* Logo column */}
-          <div className="space-y-4">
+          <div className="space-y-4 col-span-2 lg:col-span-1">
             <div className="flex items-center gap-1.5 cursor-pointer select-none" onClick={() => { setActiveCategory('all'); setSearchQuery(''); }}>
               <span className="text-2xl font-black text-white tracking-tight">Volt</span>
               <div className="relative flex items-center justify-center -mx-0.5">
@@ -1425,17 +1664,17 @@ export default function App() {
             </div>
             
             {/* Redes sociais do Rodapé */}
-            <div className="pt-4 space-y-2">
-              <p className="text-[9px] uppercase tracking-wider text-slate-400 font-bold">Conecte-se Conosco / Clique Aqui</p>
+            <div className="pt-2 space-y-2">
+              <p className="text-[9px] uppercase tracking-wider text-slate-450 font-bold">Conecte-se Conosco / Clique Aqui</p>
               <div className="flex items-center gap-3">
                 <a 
                   href="https://www.instagram.com/volttec_brasil?igsh=MWFtNTk4b2Y4NGx3Zg%3D%3D&utm_source=qr" 
                   target="_blank" 
                   rel="noreferrer"
-                  className="p-2.5 bg-white/5 rounded-full border border-white/10 text-slate-300 hover:text-pink-500 hover:bg-pink-500/10 hover:border-pink-500/30 hover:scale-110 transition-all duration-300 flex items-center justify-center shadow-lg hover:shadow-pink-500/5"
+                  className="p-2 bg-white/5 rounded-full border border-white/10 text-slate-300 hover:text-pink-500 hover:bg-pink-500/10 hover:border-pink-500/30 hover:scale-110 transition-all duration-300 flex items-center justify-center shadow-lg hover:shadow-pink-500/5"
                   title="Siga no Instagram (@volttec_brasil)"
                 >
-                  <svg className="h-4.5 w-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect>
                     <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path>
                     <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line>
@@ -1445,10 +1684,10 @@ export default function App() {
                   href="https://tiktok.com/@volttecbrasil" 
                   target="_blank" 
                   rel="noreferrer"
-                  className="p-2.5 bg-white/5 rounded-full border border-white/10 text-slate-300 hover:text-cyan-400 hover:bg-cyan-500/10 hover:border-cyan-500/30 hover:scale-110 transition-all duration-300 flex items-center justify-center shadow-lg hover:shadow-cyan-500/5"
+                  className="p-2 bg-white/5 rounded-full border border-white/10 text-slate-300 hover:text-cyan-400 hover:bg-cyan-500/10 hover:border-cyan-500/30 hover:scale-110 transition-all duration-300 flex items-center justify-center shadow-lg hover:shadow-cyan-500/5"
                   title="Siga no TikTok (@volttecbrasil)"
                 >
-                  <svg className="h-4.5 w-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M9 12a4 4 0 1 0 4 4V4a5 5 0 0 0 5 5"></path>
                   </svg>
                 </a>
@@ -1456,21 +1695,21 @@ export default function App() {
                   href="https://wa.me/5511998765432" 
                   target="_blank" 
                   rel="noreferrer"
-                  className="p-2.5 bg-white/5 rounded-full border border-white/10 text-slate-300 hover:text-emerald-400 hover:bg-emerald-500/10 hover:border-emerald-500/30 hover:scale-110 transition-all duration-300 flex items-center justify-center shadow-lg hover:shadow-emerald-500/5"
+                  className="p-2 bg-white/5 rounded-full border border-white/10 text-slate-300 hover:text-emerald-400 hover:bg-emerald-500/10 hover:border-emerald-500/30 hover:scale-110 transition-all duration-300 flex items-center justify-center shadow-lg hover:shadow-emerald-500/5"
                   title="Fale no WhatsApp (+55 11 99876-5432)"
                 >
-                  <svg className="h-4.5 w-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
                   </svg>
                 </a>
               </div>
             </div>
           </div>
-
+          
           {/* Nav links columns */}
-          <div className="space-y-3">
+          <div className="space-y-3 col-span-1">
             <h4 className="text-xs font-bold text-white uppercase tracking-wider">Produtos</h4>
-            <ul className="text-xs text-slate-400 space-y-2">
+            <ul className="text-[11px] sm:text-xs text-slate-400 space-y-2">
               <li><a href="#store-grid" className="hover:text-amber-400 transition-colors">Wearables de Grafeno</a></li>
               <li><a href="#store-grid" className="hover:text-amber-400 transition-colors">Aparelhos de Áudio Pro</a></li>
               <li><a href="#store-grid" className="hover:text-amber-400 transition-colors">Bases Magnéticas Wood</a></li>
@@ -1478,24 +1717,24 @@ export default function App() {
             </ul>
           </div>
 
-          <div className="space-y-3">
+          <div className="space-y-3 col-span-1">
             <h4 className="text-xs font-bold text-white uppercase tracking-wider">Segurança &amp; Termos</h4>
-            <ul className="text-xs text-slate-400 space-y-2">
-              <li className="flex items-center gap-1"><ShieldCheck className="h-3.5 w-3.5 text-emerald-400" /> <span>Rastreamento em Blockchain</span></li>
-              <li className="flex items-center gap-1"><Lock className="h-3.5 w-3.5 text-cyan-400" /> <span>Transação Segura SSL de 256 bits</span></li>
-              <li><a href="#" className="hover:text-amber-400 transition-colors">Políticas de Devolução Rápida</a></li>
-              <li><a href="#" className="hover:text-amber-400 transition-colors">Privacidade de Dados LGPD</a></li>
+            <ul className="text-[11px] sm:text-xs text-slate-400 space-y-2">
+              <li className="flex items-center gap-1"><ShieldCheck className="h-3.5 w-3.5 text-emerald-400 shrink-0" /> <span>Rastreamento em Blockchain</span></li>
+              <li className="flex items-center gap-1"><Lock className="h-3.5 w-3.5 text-cyan-400 shrink-0" /> <span>Transação Segura SSL</span></li>
+              <li><a href="#" className="hover:text-amber-400 transition-colors">Políticas de Devolução</a></li>
+              <li><a href="#" className="hover:text-amber-400 transition-colors">Privacidade LGPD</a></li>
             </ul>
           </div>
 
-          <div className="space-y-3">
+          <div className="space-y-3 col-span-2 lg:col-span-1">
             <h4 className="text-xs font-bold text-white uppercase tracking-wider">Central VoltTec</h4>
-            <p className="text-[11px] text-slate-450">Suporte prioritário 24/7. Abra a aba de conversação inteligente no canto inferior direito para auxílio imediato de produtos.</p>
+            <p className="text-[11px] text-slate-450 leading-relaxed">Suporte prioritário 24/7. Abra a aba de conversação no canto inferior direito para auxílio de garantia imediato.</p>
             <a 
               href="https://wa.me/5511998765432"
               target="_blank"
               rel="noreferrer"
-              className="bg-slate-900 hover:bg-slate-850 hover:text-amber-400 text-slate-200 border border-white/10 text-xs px-4 py-2 rounded-xl transition-all inline-flex items-center gap-2 font-semibold"
+              className="bg-slate-900 hover:bg-slate-850 hover:text-amber-400 text-slate-200 border border-white/10 text-[11px] sm:text-xs px-3 py-2 rounded-xl transition-all inline-flex items-center gap-2 font-semibold"
             >
               <MessageSquare className="h-3.5 w-3.5 text-emerald-400" />
               <span>Chame Nossa Equipe</span>
@@ -2048,6 +2287,8 @@ export default function App() {
                   </div>
                 </div>
               )}
+              
+              <div ref={chatEndRef} />
             </div>
 
             {/* Quick action helper buttons */}
@@ -2693,6 +2934,35 @@ export default function App() {
             </span>
             <span>{toast.message}</span>
             <button onClick={() => setToast(null)} className="text-[10px] text-slate-400 hover:text-white underline font-bold px-1 ml-2">X</button>
+          </div>
+        </div>
+      )}
+
+      {/* --- COOKIE CONSENT BANNER BOTTOM --- */}
+      {showCookieBanner && (
+        <div className="fixed bottom-4 left-4 right-4 md:bottom-0 md:left-0 md:right-0 z-50 bg-[#0e1424]/95 backdrop-blur-md border border-white/10 md:border-t md:border-x-0 md:border-b-0 rounded-2xl md:rounded-none shadow-[0_-10px_30px_rgba(0,0,0,0.60)] p-3.5 sm:p-5 md:p-6 text-slate-100 flex flex-col md:flex-row items-center justify-between gap-3 sm:gap-4 animate-fade-in-up">
+          <div className="max-w-4xl space-y-1 text-left">
+            <h4 className="text-xs sm:text-sm font-bold text-white flex items-center gap-1.5">
+              <span className="p-0.5 rounded bg-amber-500/10 text-amber-500 text-xs">🍪</span>
+              Sua privacidade é nossa prioridade
+            </h4>
+            <p className="text-[10.5px] sm:text-xs text-slate-300 leading-relaxed md:leading-normal">
+              Utilizamos cookies e tecnologias semelhantes para garantir o funcionamento correto do nosso site, analisar o desempenho técnico, personalizar ofertas e aprimorar a sua experiência na VoltTec. Ao clicar em <strong className="text-amber-400">"Aceitar Cookies"</strong>, você concorda com o armazenamento dessas informações em seu dispositivo.
+            </p>
+          </div>
+          <div className="flex items-center gap-2 w-full md:w-auto shrink-0">
+            <button
+              onClick={handleDeclineCookies}
+              className="flex-1 md:flex-none text-slate-300 hover:text-white bg-slate-900 hover:bg-slate-850 border border-white/10 text-[10px] sm:text-xs font-bold uppercase tracking-wider px-3 py-2 sm:px-5 sm:py-3 rounded-lg sm:rounded-xl transition-all cursor-pointer text-center"
+            >
+              Não Permitir
+            </button>
+            <button
+              onClick={handleAcceptCookies}
+              className="flex-1 md:flex-none text-black bg-amber-600 hover:bg-amber-500 font-extrabold text-[10px] sm:text-xs uppercase tracking-wider px-3 py-2 sm:px-5 sm:py-3 rounded-lg sm:rounded-xl transition-all shadow-md shadow-amber-950/20 cursor-pointer text-center"
+            >
+              Aceitar
+            </button>
           </div>
         </div>
       )}
