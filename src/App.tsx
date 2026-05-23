@@ -1585,48 +1585,40 @@ export default function App() {
             <p className="text-xs md:text-sm text-slate-400 mt-1">Transparência auditada. Veja o relato de quem comprou e testou nossos eletrônicos premium.</p>
           </div>
 
-          <div className="grid grid-cols-3 md:grid-cols-3 gap-2.5 sm:gap-6">
-            {reviews.slice(0, 7).map((rev, idx) => (
-              <div 
-                key={rev.id} 
-                className={`bg-slate-900/60 border border-white/5 rounded-xl sm:rounded-2xl p-2 sm:p-6 relative transition-all hover:scale-[1.02] flex flex-col justify-between ${
-                  idx === 6 
-                    ? 'col-span-3 md:col-span-1 max-w-[280px] md:max-w-none mx-auto w-full' 
-                    : 'col-span-1'
-                }`}
-              >
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {reviews.map(rev => (
+              <div key={rev.id} className="bg-slate-900/60 border border-white/5 rounded-2xl p-6 relative flex flex-col justify-between transition-all hover:scale-[1.01]">
                 <div>
-                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-1 sm:gap-2 mb-2 sm:mb-4">
+                  <div className="flex justify-between items-start mb-4">
                     <div>
-                      <h4 className="text-[8.5px] sm:text-sm font-bold text-white flex items-center gap-1 leading-tight">
-                        <span className="truncate max-w-[55px] sm:max-w-none">{rev.name.split(' ')[0]}</span>
+                      <h4 className="text-sm font-bold text-white flex items-center gap-1.5">
+                        <span>{rev.name}</span>
                         {rev.verified && (
-                          <Check className="h-2.5 w-2.5 sm:h-3 sm:w-3 text-[#3b82f6] bg-[#3b82f6]/10 p-0.5 rounded-full shrink-0" title="Comprador Verificado" />
+                          <Check className="h-3 w-3 text-[#3b82f6] bg-[#3b82f6]/10 p-0.5 rounded-full" title="Comprador Verificado" />
                         )}
                       </h4>
-                      <span className="text-[7.5px] sm:text-[10px] text-[#475569] block mt-0.5">{rev.date}</span>
+                      <span className="text-[10px] text-[#475569]">{rev.date}</span>
                     </div>
-                    <div className="flex text-amber-400 gap-0.5">
+                    <div className="flex text-amber-400">
                       {Array.from({ length: rev.rating }).map((_, i) => (
-                        <Star key={i} className="h-2 w-2 sm:h-3 sm:w-3 fill-amber-400 text-amber-400" />
+                        <Star key={i} className="h-3 w-3 fill-amber-400 text-amber-400" />
                       ))}
                     </div>
                   </div>
-                  <p className="text-[8px] sm:text-xs text-slate-300 leading-normal sm:leading-relaxed italic">
+                  <p className="text-xs text-slate-300 leading-relaxed italic">
                     "{rev.comment}"
                   </p>
                 </div>
                 
-                <div className="mt-2.5 sm:mt-4">
+                <div className="mt-4">
                   {rev.verified ? (
-                    <div className="flex items-center gap-0.5 sm:gap-1.5 text-[7px] sm:text-[10px] text-emerald-400 font-semibold bg-emerald-500/5 px-1 sm:px-2.5 py-0.5 sm:py-1 rounded w-fit shrink-0">
-                      <ShieldCheck className="h-2 w-2 sm:h-3 sm:w-3 shrink-0" />
-                      <span className="hidden xs:inline">Compra Verificada</span>
-                      <span className="inline xs:hidden">Verificado</span>
+                    <div className="flex items-center gap-1.5 text-[10px] text-emerald-400 font-semibold bg-emerald-500/5 px-2.5 py-1 rounded w-fit">
+                      <ShieldCheck className="h-3 w-3" />
+                      <span>Compra Segura Verificada</span>
                     </div>
                   ) : (
-                    <div className="flex items-center gap-0.5 sm:gap-1.5 text-[7px] sm:text-[10px] text-slate-500 font-medium bg-white/5 px-1 sm:px-2.5 py-0.5 sm:py-1 rounded w-fit shrink-0">
-                      <span>Visitante</span>
+                    <div className="flex items-center gap-1.5 text-[10px] text-slate-500 font-medium bg-white/5 px-2.5 py-1 rounded w-fit">
+                      <span>Avaliação de Visitante</span>
                     </div>
                   )}
                 </div>

@@ -223,21 +223,19 @@ export function RealTimeShipments() {
         </div>
 
         {/* Dynamic Shipments Progress Grid */}
-        <div className="grid grid-cols-2 gap-3 sm:gap-6 max-w-4xl mx-auto">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 max-w-4xl mx-auto">
           {shipments.map((ship, idx) => {
             const isHighlight = highlightedId === ship.id;
             return (
               <div 
                 key={ship.id}
                 id={`shipment-card-${ship.id}`}
-                className={`bg-slate-900/40 backdrop-blur-md rounded-2xl p-2.5 sm:p-4 border transition-all duration-700 relative overflow-hidden flex flex-col justify-between ${
+                className={`bg-slate-900/40 backdrop-blur-md rounded-2xl p-4 border transition-all duration-700 relative overflow-hidden flex flex-col justify-between ${
                   isHighlight 
                     ? 'border-amber-500/50 shadow-[0_0_20px_rgba(245,158,11,0.15)] bg-slate-900/80 scale-[1.01]' 
                     : 'border-white/5 hover:border-white/15'
                 } ${
-                  idx === 2 
-                    ? 'col-span-2 md:col-span-2 md:max-w-[410px] md:mx-auto w-full' 
-                    : 'col-span-1'
+                  idx === 2 ? 'md:col-span-2 md:max-w-[410px] md:mx-auto w-full' : ''
                 }`}
               >
                 {/* Background active glow for highlight */}
@@ -246,46 +244,46 @@ export function RealTimeShipments() {
                 )}
 
                 {/* Top tracking row */}
-                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-1.5 mb-2.5 sm:mb-4">
-                  <div className="space-y-0.5">
-                    <span className="text-[8px] sm:text-[10px] font-mono font-bold text-slate-500 tracking-wider">RASTREIO</span>
-                    <h4 className="text-[10px] sm:text-xs font-mono font-black text-white flex items-center gap-1">
+                <div className="flex items-start justify-between gap-2 mb-4">
+                  <div className="space-y-1">
+                    <span className="text-[10px] font-mono font-bold text-slate-500 tracking-wider">RASTREIO</span>
+                    <h4 className="text-xs font-mono font-black text-white flex items-center gap-1.5">
                       <span>{ship.trackingCode}</span>
-                      <span className="hidden xs:inline text-[8px] sm:text-[9px] px-1 py-0.2 rounded bg-white/5 text-slate-400">VoltCargo</span>
+                      <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-white/5 text-slate-400">VoltCargo</span>
                     </h4>
                   </div>
 
-                  <span className={`text-[8px] sm:text-[10px] px-1.5 sm:px-2.5 py-0.5 sm:py-1 rounded-md sm:rounded-lg border font-bold uppercase tracking-wider font-mono shrink-0 flex items-center gap-1 ${getStatusColor(ship.status)} w-fit`}>
-                    <Activity className="h-2 w-2 sm:h-3 sm:w-3 animate-pulse" />
+                  <span className={`text-[10px] px-2.5 py-1 rounded-lg border font-bold uppercase tracking-wider font-mono shrink-0 flex items-center gap-1.5 ${getStatusColor(ship.status)}`}>
+                    <Activity className="h-3 w-3 animate-pulse" />
                     <span>{getStatusLabel(ship.status)}</span>
                   </span>
                 </div>
 
                 {/* Main Shipment Details */}
-                <div className="bg-slate-950/40 rounded-xl p-2 sm:p-3.5 border border-white/5 space-y-1 sm:space-y-2 mb-2.5 sm:mb-4">
-                  <div className="flex items-center gap-1.5 text-[10px] sm:text-xs text-white font-medium">
-                    <Package className="h-3 w-3 sm:h-4 sm:w-4 text-amber-500 shrink-0" />
+                <div className="bg-slate-950/40 rounded-xl p-3.5 border border-white/5 space-y-2 mb-4">
+                  <div className="flex items-center gap-2 text-xs text-white font-medium">
+                    <Package className="h-4 w-4 text-amber-500 shrink-0" />
                     <span className="truncate">{ship.productName}</span>
                   </div>
 
-                  <div className="flex items-center gap-1.5 text-[9px] sm:text-[11px] text-slate-400">
-                    <MapPin className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-slate-500 shrink-0" />
+                  <div className="flex items-center gap-2 text-[11px] text-slate-400">
+                    <MapPin className="h-3.5 w-3.5 text-slate-500 shrink-0" />
                     <span className="truncate">{ship.customerName} &bull; <strong className="text-slate-300 font-semibold">{ship.location}</strong></span>
                   </div>
                 </div>
 
                 {/* Progress bar and time */}
-                <div className="space-y-1.5 sm:space-y-2 mt-auto">
-                  <div className="flex justify-between items-center text-[8px] sm:text-[10px] text-slate-500">
+                <div className="space-y-2 mt-auto">
+                  <div className="flex justify-between items-center text-[10px] text-slate-500">
                     <span className="font-mono">{ship.progress}% Concluído</span>
-                    <span className="flex items-center gap-0.5 sm:gap-1">
-                      <Clock className="h-2.5 w-2.5 sm:h-3 sm:w-3 text-slate-500" />
+                    <span className="flex items-center gap-1">
+                      <Clock className="h-3 w-3 text-slate-500" />
                       <span>{ship.timestamp}</span>
                     </span>
                   </div>
 
                   {/* Outer bar */}
-                  <div className="w-full bg-slate-950 rounded-full h-1 sm:h-1.5 overflow-hidden border border-white/5">
+                  <div className="w-full bg-slate-950 rounded-full h-1.5 overflow-hidden border border-white/5">
                     {/* Inner progress filled */}
                     <div 
                       className="bg-gradient-to-r from-amber-600 via-amber-500 to-amber-400 h-full rounded-full transition-all duration-1000 animate-pulse" 
@@ -294,7 +292,7 @@ export function RealTimeShipments() {
                   </div>
 
                   {/* Bottom animated status icon trace */}
-                  <div className="hidden sm:flex items-center justify-between text-[9px] text-slate-600 pt-1 font-mono uppercase">
+                  <div className="flex items-center justify-between text-[9px] text-slate-600 pt-1 font-mono uppercase">
                     <span>Preparado</span>
                     <ArrowRight className="h-3 w-3 text-slate-600" />
                     <span>Embalagem</span>
